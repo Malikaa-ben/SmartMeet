@@ -1,100 +1,189 @@
 
 
-import re
+from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification
+import torch
 
 
 class SentimentAnalyzer:
     """
-    Analyse de sentiment multilingue par mots-clés.
-    Fonctionne en français, anglais et arabe.
-    Aucun modèle à télécharger — 0 MB RAM.
+    Analyse de sentiment via modele transformer multilingue pre-entraine.
+    Aucune heuristique ni mots-cles — 100% modele ML.
+
+    Modele : tabularisai/multilingual-sentiment-analysis
+    Labels : Very Negative / Negative / Neutral / Positive / Very Positive
     """
 
+    MODEL_NAME = "tabularisai/multilingual-sentiment-analysis"
 
-    POSITIVE_WORDS = {
-        # Français
-        "bien", "super", "excellent", "parfait", "bravo", "merci", "accord",
-        "validé", "approuvé", "ok", "oui", "bonne", "bon", "génial",
-        "efficace", "réussi", "succès", "progrès", "avancer", "résolu",
-        "contenu", "satisfait", "positif", "top", "idéal", "favorable",
-        # English
-        "good", "great", "excellent", "perfect", "yes", "agree", "approved",
-        "success", "done", "nice", "awesome", "thanks", "correct", "right",
-        # Arabe
-        "جيد", "ممتاز", "نعم", "موافق", "شكرا", "رائع",
+    # Mapping labels du modele -> format interne
+    LABEL_MAP = {
+        "Very Negative": "negative",
+        "Negative":      "negative",
+        "Neutral":       "neutral",
+        "Positive":      "positive",
+        "Very Positive": "positive",
     }
 
-
-    NEGATIVE_WORDS = {
-        # Français
-        "non", "problème", "erreur", "mauvais", "difficile", "impossible",
-        "refus", "refusé", "bloqué", "retard", "échec", "raté", "bug",
-        "urgent", "critique", "grave", "risque", "peur", "inquiet",
-        "cher", "coût", "budget", "dépassé", "annulé", "rejeté",
-        # English
-        "no", "bad", "error", "problem", "fail", "wrong", "issue",
-        "blocked", "delay", "reject", "cancel", "risk", "bug", "crash",
-        # Arabe
-        "لا", "مشكلة", "خطأ", "سيء", "صعب",
+    # Score ajuste selon l'intensite
+    SCORE_MAP = {
+        "Very Negative": 0.95,
+        "Negative":      0.75,
+        "Neutral":       0.60,
+        "Positive":      0.75,
+        "Very Positive": 0.95,
     }
 
-    EMOJI_MAP = {"positif": "😊", "neutre": "😐", "négatif": "😟"}
-    COLOR_MAP = {"positif": "#22c55e", "neutre": "#94a3b8", "négatif": "#ef4444"}
-    LABEL_EN = {"positif": "positive", "neutre": "neutral", "négatif": "negative"}
+    EMOJI_MAP = {
+        "positive": "😊",
+        "neutral":  "😐",
+        "negative": "😟",
+    }
+
+    COLOR_MAP = {
+        "positive": "#22c55e",
+        "neutral":  "#94a3b8",
+        "negative": "#ef4444",
+    }
+
+    LABEL_FR = {
+        "positive": "positif",
+        "neutral":  "neutre",
+        "negative": "negatif",
+    }
 
     def __init__(self):
-        print("SentimentAnalyzer chargé (mode mots-clés, 0 MB RAM, gratuit)")
+        print(f"Chargement du modele de sentiment : {self.MODEL_NAME} ...")
+        try:
+            self._tokenizer = AutoTokenizer.from_pretrained(self.MODEL_NAME)
+            self._model     = AutoModelForSequenceClassification.from_pretrained(
+                self.MODEL_NAME
+            )
+            self._model.eval()
+
+            # Pipeline haut niveau pour inference simple
+            self._pipe = pipeline(
+                task="text-classification",
+                model=self._model,
+                tokenizer=self._tokenizer,
+                max_length=512,
+                truncation=True,
+                device=0 if torch.cuda.is_available() else -1,
+            )
+
+            # Recuperer les labels depuis la config du modele
+            self._id2label = self._model.config.id2label
+            print(f"Modele charge. Labels : {list(self._id2label.values())}")
+            print(f"Device : {'GPU' if torch.cuda.is_available() else 'CPU'}")
+            print(f"Sentiment pret.")
+
+        except Exception as e:
+            raise RuntimeError(
+                f"Impossible de charger le modele de sentiment '{self.MODEL_NAME}'.\n"
+                f"Verifiez votre connexion internet et installez : "
+                f"pip install transformers torch\n"
+                f"Erreur : {e}"
+            )
 
     def analyze(self, text: str) -> dict:
         """
-        Analyse le sentiment d'un texte par mots-clés.
-        Retourne : { label, score, emoji, color }
+        Analyse le sentiment d'un texte via le modele pre-entraine.
+
+        Args:
+            text : texte a analyser (francais, anglais, arabe, ...)
+
+        Returns:
+            dict avec label, label_fr, score, emoji, color
         """
         if not text or len(text.strip()) < 2:
-            return self._result("neutre", 0.5)
+            return self._build_result("Neutral", 0.6)
 
-        words = re.findall(r"\b\w+\b", text.lower())
-        pos = sum(1 for w in words if w in self.POSITIVE_WORDS)
-        neg = sum(1 for w in words if w in self.NEGATIVE_WORDS)
-        total = len(words) or 1
+        try:
+            # Truncation a 512 tokens
+            out        = self._pipe(text[:1024], top_k=1)[0]
+            raw_label  = out["label"]    # ex: "Positive", "Very Negative"
+            confidence = round(float(out["score"]), 3)
 
-        if pos == 0 and neg == 0:
-            return self._result("neutre", 0.6)
+            # Utiliser le score du modele (confiance) ou le score ajuste
+            final_score = max(confidence, self.SCORE_MAP.get(raw_label, 0.6))
 
-        if pos > neg:
-            score = min(0.95, 0.6 + pos / total)
-            return self._result("positif", round(score, 3))
-        elif neg > pos:
-            score = min(0.95, 0.6 + neg / total)
-            return self._result("négatif", round(score, 3))
-        else:
-            return self._result("neutre", 0.55)
+            return self._build_result(raw_label, final_score)
 
-    def _result(self, label: str, score: float) -> dict:
+        except Exception as e:
+            print(f"Erreur inference sentiment : {e}")
+            # Retourner neutre en cas d'erreur technique (pas de fallback heuristique)
+            return self._build_result("Neutral", 0.5)
+
+    def _build_result(self, raw_label: str, score: float) -> dict:
+        """Construit le dictionnaire de resultat normalise."""
+        label = self.LABEL_MAP.get(raw_label, "neutral")
         return {
-            "label": self.LABEL_EN[label],  
-            "label_fr": label,
-            "score": score,
-            "emoji": self.EMOJI_MAP[label],
-            "color": self.COLOR_MAP[label],
+            "label":     label,
+            "label_fr":  self.LABEL_FR[label],
+            "label_raw": raw_label,   # label original du modele (ex: "Very Positive")
+            "score":     round(score, 3),
+            "emoji":     self.EMOJI_MAP[label],
+            "color":     self.COLOR_MAP[label],
         }
 
     def analyze_batch(self, texts: list) -> list:
-        return [self.analyze(t) for t in texts]
+        """
+        Analyse une liste de textes en batch (plus efficace).
+
+        Args:
+            texts : liste de chaines de caracteres
+
+        Returns:
+            liste de dictionnaires de resultats
+        """
+        if not texts:
+            return []
+
+        try:
+            # Traitement batch natif du pipeline
+            valid  = [t[:1024] if t and len(t.strip()) >= 2 else "." for t in texts]
+            outs   = self._pipe(valid, top_k=1, batch_size=8)
+            return [
+                self._build_result(o[0]["label"], max(float(o[0]["score"]), self.SCORE_MAP.get(o[0]["label"], 0.6)))
+                for o in outs
+            ]
+        except Exception as e:
+            print(f"Erreur batch sentiment : {e}")
+            return [self._build_result("Neutral", 0.5) for _ in texts]
 
     def aggregate_session_sentiment(self, sentiments: list) -> dict:
+        """
+        Calcule le sentiment dominant sur toute une session.
+
+        Args:
+            sentiments : liste de resultats de analyze()
+
+        Returns:
+            dict avec dominant, distribution, emoji, color
+        """
         if not sentiments:
-            return {"dominant": "neutral", "distribution": {}}
+            return {
+                "dominant":     "neutral",
+                "dominant_fr":  "neutre",
+                "distribution": {"positive": 0.0, "neutral": 1.0, "negative": 0.0},
+                "emoji":        "😐",
+                "color":        "#94a3b8",
+            }
+
         counts = {"positive": 0, "neutral": 0, "negative": 0}
         for s in sentiments:
-            counts[s.get("label", "neutral")] = counts.get(s.get("label", "neutral"), 0) + 1
-        total = len(sentiments)
-        distribution = {k: round(v / total, 2) for k, v in counts.items()}
+            label = s.get("label", "neutral")
+            if label in counts:
+                counts[label] += 1
+
+        total    = len(sentiments)
+        dist     = {k: round(v / total, 2) for k, v in counts.items()}
         dominant = max(counts, key=counts.get)
-        label_fr = {"positive": "positif", "neutral": "neutre", "negative": "négatif"}[dominant]
+
         return {
-            "dominant": dominant,
-            "distribution": distribution,
-            "emoji": self.EMOJI_MAP[label_fr],
-            "color": self.COLOR_MAP[label_fr],
+            "dominant":     dominant,
+            "dominant_fr":  self.LABEL_FR[dominant],
+            "distribution": dist,
+            "emoji":        self.EMOJI_MAP[dominant],
+            "color":        self.COLOR_MAP[dominant],
+            "total_segments": total,
         }

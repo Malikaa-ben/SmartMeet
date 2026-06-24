@@ -37,29 +37,22 @@ class ASREngine:
         if audio.dtype != np.float32:
             audio = audio.astype(np.float32)
 
-        # Détermination de la langue
-        forced_lang = None
-        if language:
-            forced_lang = self.LANG_ALIASES.get(language.lower(), language.lower())
-        
-        if not forced_lang:
-            # Si aucune langue n'est demandée, on utilise le français par défaut
+        forced_lang = self.LANG_ALIASES.get(language.lower(), language.lower()) if language else (self._detected_lang or "fr")
 
-            forced_lang = self._detected_lang if self._detected_lang else "fr"
-
-        # Transcription avec réglages de précision
+        # --- MODIFICATIONS ICI ---
         segments_gen, info = self.model.transcribe(
             audio,
             language=forced_lang,
             task="transcribe",
-            beam_size=5,             
-            temperature=0.0,         
-            vad_filter=True,         
-            vad_parameters=dict(
-                min_silence_duration_ms=1000, 
-                speech_pad_ms=200
-            ),
+            beam_size=5,            
+            temperature=0.0,        
+            vad_filter=True,        
+            vad_parameters=dict(min_silence_duration_ms=1000, speech_pad_ms=200),
+
+            condition_on_previous_text=False, 
+            no_speech_threshold=0.6,          
         )
+
 
         segments = list(segments_gen)
         text = " ".join(s.text for s in segments).strip()

@@ -169,6 +169,15 @@ def regenerate_summary(session_id: str, db: Session = Depends(get_db)):
 
     return {"message": "Résumé régénéré avec succès.", "session_id": session_id, "preview": preview}
 
+@router.post("/agent/ask")
+async def agent_ask(body: dict):
+    from agent import ask_agent
+    question = body.get("question", "").strip()
+    if not question:
+        raise HTTPException(400, "Question vide")
+    answer = ask_agent(question)
+    return {"question": question, "answer": answer}
+
 
 @router.delete("/meetings/{session_id}")
 def delete_meeting(session_id: str, db: Session = Depends(get_db)):

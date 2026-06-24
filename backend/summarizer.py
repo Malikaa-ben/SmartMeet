@@ -16,7 +16,7 @@ class MeetingSummarizer:
         base       = ollama_base or os.getenv("OLLAMA_BASE", "http://localhost:11434")
         self.chat_url = f"{base}/api/chat"
         self.tags_url = f"{base}/api/tags"
-        print(f" MeetingSummarizer → '{self.model}' @ {self.chat_url}")
+        print(f" MeetingSummarizer -> '{self.model}' @ {self.chat_url}")
 
 
 
