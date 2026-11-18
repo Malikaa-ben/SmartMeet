@@ -134,11 +134,11 @@ async def import_audio_file(file: UploadFile = File(...)):
         session_id = str(uuid.uuid4())
         db = SessionLocal()
         meeting = Meeting(
-            session_id=session_id,
-            title=file.filename or "Réunion importée",
-            started_at=datetime.utcnow(),
-            status="active",
-        )
+        session_id=session_id,
+        title=f"Réunion du {datetime.utcnow().strftime('%d/%m/%Y %H:%M')}",  
+        started_at=datetime.utcnow(),
+        status="active",
+)
         db.add(meeting)
         db.commit()
         db.refresh(meeting)

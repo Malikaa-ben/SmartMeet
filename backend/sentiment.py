@@ -15,7 +15,7 @@ class SentimentAnalyzer:
 
     MODEL_NAME = "tabularisai/multilingual-sentiment-analysis"
 
-    # Mapping labels du modele -> format interne
+
     LABEL_MAP = {
         "Very Negative": "negative",
         "Negative":      "negative",
@@ -24,7 +24,7 @@ class SentimentAnalyzer:
         "Very Positive": "positive",
     }
 
-    # Score ajuste selon l'intensite
+   
     SCORE_MAP = {
         "Very Negative": 0.95,
         "Negative":      0.75,
@@ -70,7 +70,7 @@ class SentimentAnalyzer:
                 device=0 if torch.cuda.is_available() else -1,
             )
 
-            # Recuperer les labels depuis la config du modele
+          
             self._id2label = self._model.config.id2label
             print(f"Modele charge. Labels : {list(self._id2label.values())}")
             print(f"Device : {'GPU' if torch.cuda.is_available() else 'CPU'}")
@@ -100,10 +100,9 @@ class SentimentAnalyzer:
         try:
             # Truncation a 512 tokens
             out        = self._pipe(text[:1024], top_k=1)[0]
-            raw_label  = out["label"]    # ex: "Positive", "Very Negative"
+            raw_label  = out["label"]   
             confidence = round(float(out["score"]), 3)
 
-            # Utiliser le score du modele (confiance) ou le score ajuste
             final_score = max(confidence, self.SCORE_MAP.get(raw_label, 0.6))
 
             return self._build_result(raw_label, final_score)
@@ -114,7 +113,7 @@ class SentimentAnalyzer:
             return self._build_result("Neutral", 0.5)
 
     def _build_result(self, raw_label: str, score: float) -> dict:
-        """Construit le dictionnaire de resultat normalise."""
+
         label = self.LABEL_MAP.get(raw_label, "neutral")
         return {
             "label":     label,

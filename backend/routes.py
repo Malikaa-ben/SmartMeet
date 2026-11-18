@@ -171,12 +171,32 @@ def regenerate_summary(session_id: str, db: Session = Depends(get_db)):
 
 @router.post("/agent/ask")
 async def agent_ask(body: dict):
-    from agent import ask_agent
+    from agent import agent_instance   
     question = body.get("question", "").strip()
     if not question:
         raise HTTPException(400, "Question vide")
-    answer = ask_agent(question)
-    return {"question": question, "answer": answer}
+    result = agent_instance.chat(question)
+    return {
+        "question": question,
+        "answer": result["answer"],
+        "debug": result.get("debug") 
+    }
+@router.post("/meetings/cleanup-orphans")
+def cleanup_orphans(db: Session = Depends(get_db)):
+    """Ferme les réunions actives sans transcriptions (sessions abandonnées)."""
+    from sqlalchemy import and_
+    orphans = (
+        db.query(Meeting)
+        .filter(Meeting.status == "active")
+        .filter(~Meeting.transcripts.any())
+        .all()
+    )
+    count = len(orphans)
+    for m in orphans:
+        m.status = "completed"
+        m.ended_at = datetime.utcnow()
+    db.commit()
+    return {"cleaned": count}
 
 
 @router.delete("/meetings/{session_id}")
