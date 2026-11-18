@@ -4,7 +4,7 @@
 
 Tous les modèles tournent **en local** (aucune donnée envoyée vers un service cloud), ce qui garantit la confidentialité des échanges.
 
-> Projet de fin d'année (PFA) – [Ton école / filière], [année universitaire].
+> Projet de fin d'année (PFA).
 
 ## Fonctionnalités
 
@@ -91,7 +91,7 @@ Projet_pfa/
 ### 1. Cloner le dépôt
 
 ```bash
-git clone https://github.com/TON_USER/smartmeet.git
+git clone <url-du-depot>
 cd smartmeet
 ```
 
@@ -176,14 +176,3 @@ python eval_agent.py              # teste les requêtes de l'agent sur la base r
 python test_latency_summer.py     # latence du résumé
 python test_memory_usage.py       # consommation mémoire
 ```
-
-## Auteurs
-
-- [Ton nom] – [email ou profil GitHub]
-- [Nom du binôme, si applicable]
-
-Encadrant : [Nom de l'encadrant]
-
-## Licence
-
-Projet académique – [MIT / tous droits réservés, à choisir].
